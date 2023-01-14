@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: env-injector-mw-dep
+  namespace: env-injector
+spec:
+  selector:
+    matchLabels:
+      app: env-injector-webhook
+  template:
+    metadata:
+      labels:
+        app: env-injector-webhook
+    spec:
+      serviceAccount: env-injector-sa
+      containers:
+        - image: cerit.io/cerit/envinjector:12-1-2023-3
+          args:
+          readinessProbe:
+            httpGet:
+              port: 8443
+              path: /health
+              scheme: HTTPS
+            periodSeconds: 10
+          name: env-injector-pod
+          volumeMounts:
+            - name: tls
+              mountPath: "/etc/tls"
+            - name: envs
+              mountPath: "/etc/env-cm"
+      securityContext:
+        runAsUser: 1000
+      volumes:
+        - name: tls
+          secret:
+            secretName: env-injector-mw-cert-secret
+        - name: envs
+          configMap:
+            name: env-injector-cm

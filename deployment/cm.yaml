@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: env-injector-cm
+  namespace: env-injector
+data:
+  envs:  |
+    OMP_NUM_THREADS=limits.cpu

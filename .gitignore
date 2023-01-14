@@ -1,0 +1,6 @@
+.idea/
+certificate/client.csr
+certificate/client.key
+certificate/server.crt
+envijector
+

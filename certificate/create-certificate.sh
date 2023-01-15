@@ -2,7 +2,7 @@ base="env-injector-mw"
 service="${base}-svc"
 secret="${base}-cert-secret"
 namespace="env-injector"
-context="kubt-cluster"
+context="kuba-cluster"
 csrName=${service}.${namespace}
 
 #openssl genrsa -out client.key 2048
@@ -53,9 +53,8 @@ if [[ ${serverCert} == '' ]]; then
     exit 1
 fi
 
-echo -n ${serverCert} | base64 -d > server.crt
-# for some unknown reason, server cert is not saved properly but as binary file
-# must check if it is BEGIN CERTIFICATE !!
+sleep 10
+kubectl get csr ${csrName} -o jsonpath='{.status.certificate}' | base64 -d > server.crt
 
 # create the secret with CA cert and server cert/key
 kubectl create secret generic ${secret} \

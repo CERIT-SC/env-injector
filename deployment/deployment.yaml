@@ -4,6 +4,7 @@ metadata:
   name: env-injector-mw-dep
   namespace: env-injector
 spec:
+  replicas: 3
   selector:
     matchLabels:
       app: env-injector-webhook

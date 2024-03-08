@@ -1,0 +1,23 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: env-injector-certificate
+  namespace:
+spec:
+  secretName: env-injector-certificate
+  dnsNames:
+    - env-injector-mw-svc
+    - env-injector-mw-svc.env-injector
+    - env-injector-mw-svc.env-injector.svc
+  issuerRef:
+    name: selfsigned
+
+---
+
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned
+  namespace: env-injector
+spec:
+  selfSigned: {}

@@ -15,8 +15,7 @@ spec:
     spec:
       serviceAccount: env-injector-sa
       containers:
-        - image: cerit.io/cerit/envinjector:12-1-2023-3
-          args:
+        - image: cerit.io/cerit/envinjector:08-03-2024
           readinessProbe:
             httpGet:
               port: 8443
@@ -34,7 +33,7 @@ spec:
       volumes:
         - name: tls
           secret:
-            secretName: env-injector-mw-cert-secret
+            secretName: env-injector-certificate
         - name: envs
           configMap:
             name: env-injector-cm

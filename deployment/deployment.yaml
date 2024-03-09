@@ -22,6 +22,12 @@ spec:
               path: /health
               scheme: HTTPS
             periodSeconds: 10
+          securityContext:
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
           name: env-injector-pod
           volumeMounts:
             - name: tls
@@ -29,7 +35,9 @@ spec:
             - name: envs
               mountPath: "/etc/env-cm"
       securityContext:
-        runAsUser: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       volumes:
         - name: tls
           secret:

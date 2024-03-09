@@ -3,7 +3,7 @@ kind: MutatingWebhookConfiguration
 metadata:
   name: env-injector-mw.cerit.io
   annotations:
-    cert-manager.io/inject-ca-from-secret: env-injector/env-injector-mw-cert-secret
+    cert-manager.io/inject-ca-from: env-injector/env-injector-certificate
 webhooks:
   - name: env-injector-mw.cerit.io
     admissionReviewVersions: ["v1"]

@@ -1,5 +1,6 @@
 package main
 
+// https://gist.githubusercontent.com/erkanzileli/ee889be693fb3fbb586f4415519cf564/raw/876886f9954783e57cb352cec4d1c3c1f0bfb23c/refresh_certificates_on_runtime.go
 import (
 	"bufio"
 	"crypto/tls"
@@ -8,15 +9,18 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+
+	"github.com/fsnotify/fsnotify"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"log"
-	"net/http"
-	"os"
-	"strings"
 )
 
 var (
@@ -25,6 +29,8 @@ var (
 	deserializer runtime.Decoder
 	cmPath       string
 	envVarsEmpty bool
+	certPath     = "/etc/tls/tls.crt"
+	keyPath      = "/etc/tls/tls.key"
 )
 
 func init() {
@@ -40,20 +46,29 @@ func main() {
 
 	cmPath = *cmPath_
 
-	http.HandleFunc("/mutate", serveMutatePods)
-	http.HandleFunc("/health", serveHealth)
-
-	certPath := "/etc/tls/ca.crt"
-	keyPath := "/etc/tls/tls.key"
-	infoLogger.Print("Listening on port 8443...")
-
-	_, err := tls.LoadX509KeyPair(certPath, keyPath)
+	certUpdater, err := newCertificateUpdater()
 	if err != nil {
-		errorLogger.Println("TLS certs not found, exiting.")
-		panic(err)
+		log.Fatal(err)
 	}
 
-	err = http.ListenAndServeTLS(":8443", certPath, keyPath, nil)
+	go certUpdater.startFollowing()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/mutate", serveMutatePods)
+	mux.HandleFunc("/health", serveHealth)
+
+	server := &http.Server{
+		Handler: mux,
+		TLSConfig: &tls.Config{
+			GetCertificate: certUpdater.GetCertificateFunc,
+		},
+		Addr: ":8443",
+	}
+
+	infoLogger.Print("Listening on port 8443...")
+	err = server.ListenAndServeTLS("", "")
+	server.ListenAndServe()
+
 	if err != nil {
 		errorLogger.Println("Can't serve TLS server, exiting.")
 		panic(err)
@@ -195,7 +210,6 @@ func sendResponse(admissionReviewReq admissionv1.AdmissionReview, w http.Respons
 	infoLogger.Println(msg)
 	w.WriteHeader(200)
 	w.Write(jout)
-	return
 }
 
 func sendHeaderErrorResponse(w http.ResponseWriter, msg string) {
@@ -296,4 +310,73 @@ func readEnvsFromConfigMap(path string) []string {
 	}
 
 	return fileLines
+}
+
+type certificateUpdater struct {
+	certMu sync.RWMutex
+	cert   *tls.Certificate
+}
+
+func newCertificateUpdater() (*certificateUpdater, error) {
+	result := &certificateUpdater{}
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, err
+	}
+	result.cert = &cert
+	return result, nil
+}
+
+func (cu *certificateUpdater) startFollowing() {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer watcher.Close()
+
+	if err = watcher.Add(certPath); err != nil {
+		log.Fatal(err)
+	}
+	if err = watcher.Add(keyPath); err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			log.Println("event:", event)
+			if event.Op == fsnotify.Remove {
+				if err := cu.reload(); err != nil {
+					log.Printf("failed to reload certificates: %+v", err)
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Println("error:", err)
+		}
+	}
+}
+
+func (cu *certificateUpdater) reload() error {
+	log.Printf("reloading TLS certificate and key from %q and %q", certPath, keyPath)
+	newCert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		log.Printf("Keeping old TLS certificate because the new one could not be loaded: %v", err)
+		return err
+	}
+	cu.certMu.Lock()
+	defer cu.certMu.Unlock()
+	cu.cert = &newCert
+	return nil
+}
+
+func (cu *certificateUpdater) GetCertificateFunc(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	cu.certMu.RLock()
+	defer cu.certMu.RUnlock()
+	return cu.cert, nil
 }

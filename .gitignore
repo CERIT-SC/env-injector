@@ -2,5 +2,5 @@
 certificate/client.csr
 certificate/client.key
 certificate/server.crt
-envijector
+envinjector
 

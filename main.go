@@ -337,27 +337,29 @@ func (cu *certificateUpdater) startFollowing() {
 	if err = watcher.Add(certPath); err != nil {
 		log.Fatal(err)
 	}
-	if err = watcher.Add(keyPath); err != nil {
-		log.Fatal(err)
-	}
 
 	for {
 		select {
 		case event, ok := <-watcher.Events:
 			if !ok {
-				return
+				panic(errors.New("watcher event channel closed"))
 			}
 			log.Println("event:", event)
 			if event.Op == fsnotify.Remove {
+				watcher.Remove(event.Name)
+				watcher.Add(event.Name)
 				if err := cu.reload(); err != nil {
-					log.Printf("failed to reload certificates: %+v", err)
+					panic(fmt.Errorf("failed to reload certificates: %v", err))
 				}
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
-				return
+				panic(errors.New("watcher error channel closed"))
 			}
-			log.Println("error:", err)
+
+			if err != nil {
+				panic(fmt.Errorf("watcher error: %v", err))
+			}
 		}
 	}
 }
